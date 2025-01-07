@@ -25,23 +25,35 @@ fn main()
     let secret_number = generator.gen_range(1..=100);
 
     println!("The secret number is: {secret_number}");
-    println!("Please input your guess.");
 
-    let mut guess = String::new();
+    loop
+    {
+        println!("Please input your guess.");
 
-    let instance = io::stdin();
+        let mut guess = String::new();
 
-    let result = instance.read_line(&mut guess);
+        let instance = io::stdin();
 
-    result.expect("Failed to read line");
+        let result = instance.read_line(&mut guess);
 
-    let guess: u32 = guess.trim().parse().expect("Please type a number!");
+        result.expect("Failed to read line");
 
-    println!("You guessed: {}", guess);
+        let guess: u32 = match guess.trim().parse() {
+            Ok(num) => num,
+            Err(_) => continue,
+        };
 
-    match guess.cmp(&secret_number) {
-        Ordering::Less => println!("Too small!"),
-        Ordering::Greater => println!("Too big!"),
-        Ordering::Equal => println!("You win!"),
+        println!("You guessed: {}", guess);
+
+        match guess.cmp(&secret_number)
+        {
+            Ordering::Less => println!("Too small!"),
+            Ordering::Greater => println!("Too big!"),
+            Ordering::Equal =>
+            {
+                println!("You win!");
+                break;
+            }
+        }
     }
 }
