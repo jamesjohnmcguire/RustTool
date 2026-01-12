@@ -6,8 +6,9 @@ use rand::Rng;
 use std::cmp::Ordering;
 use std::io;
 use std::io::{stdout, BufWriter};
+use std::num::ParseIntError;
 
-fn main()
+fn main() -> Result<(), ParseIntError>
 {
     println!("Hello, world!");
 
@@ -18,6 +19,21 @@ fn main()
     let mut writer = BufWriter::new(stdout.lock());
     say(&message, width, &mut writer).unwrap();
 
+    let number_str = "10";
+    let number = match number_str.parse::<i32>()
+    {
+        Ok(number)  => number,
+        Err(e) => return Err(e),
+    };
+    println!("{}", number);
+    Ok(())
+
+    // quiz();
+}
+
+fn quiz()
+{
+    println!("This is a quiz function.");
     println!("Guess the number!");
 
     let mut generator = rand::thread_rng();
