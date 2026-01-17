@@ -1,0 +1,8 @@
+[package]
+name = "rusttool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+inboxes = { path = "../inboxes" }
+rand = "0.8.5"

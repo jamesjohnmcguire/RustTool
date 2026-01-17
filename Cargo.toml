@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["inboxes","rusttool"]
+
+# [package]
+# name = "hello-rust"
+# version = "0.1.0"
+# edition = "2021"
+
+# [dependencies]
+# ferris-says = "0.3.2"
+# rand = "0.8.5"
