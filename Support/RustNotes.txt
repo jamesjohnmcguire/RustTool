@@ -1,0 +1,9 @@
+Rust
+	C:\Users\JamesMc\.cargo	This can be modified with the CARGO_HOME environment variable.
+
+	cargo new rusttool
+	cargo build
+	cargo new inboxes --lib
+	cargo run -p rusttool
+	cargo test
+	cargo test -p inboxes
