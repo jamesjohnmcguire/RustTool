@@ -1,12 +1,19 @@
 use rand;
 use std::env;
 
+use fs_extra::dir::{copy, CopyOptions};
+use std::path::Path;
+use std::io::Result;
+
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
-pub fn inboxes()
+pub fn inboxes() -> Result<()>
 {
+    let src = "source_dir";
+    let dst = "destination_dir";
+
     let mut key = "HOME";
 
     if (env::consts::OS == "windows")
@@ -23,9 +30,18 @@ pub fn inboxes()
         Ok(val) => val,
         Err(e) => {
             println!("Couldn't read {key}: {e}");
-            return;
+            return Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to get user profile"));
         }
     };
+
+    // Default options: won't overwrite existing files
+    let options = CopyOptions::new();
+
+    copy(src, dst, &options);
+    Ok(())
 }
 
 pub fn inbox(directory: &str) -> bool
