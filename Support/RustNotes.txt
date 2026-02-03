@@ -7,3 +7,5 @@ Rust
 	cargo run -p rusttool
 	cargo test
 	cargo test -p inboxes
+
+	cargo add anyhow
