@@ -1,5 +1,5 @@
 fn main()
 {
     println!("Hello, world!");
-    inboxes::inbox("inbox");
+    inboxes::process().unwrap();
 }

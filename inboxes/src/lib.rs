@@ -1,16 +1,24 @@
 use anyhow::Result;
 use fs_extra::dir::{move_dir, CopyOptions};
 use std::env;
-use std::path::Path;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
-pub fn inboxes() -> Result<()>
+pub fn process() -> Result<()>
 {
-    let src = "source_dir";
-    let dst = "destination_dir";
+    println!("Processing inboxes...");
+
+    let sources = vec!
+    [
+        "/Documents",
+        "/Downloads",
+        "/OneDrive/Desktop",
+        "/OneDrive/Documents",
+        "/OneDrive/Downloads",
+        "/OneDrive/Pictures",
+    ];
 
     let key = if cfg!(windows) {
         "USERPROFILE"
@@ -22,11 +30,18 @@ pub fn inboxes() -> Result<()>
 
     let user_profile = env::var(key)?;
 
+    let destination = format!("{}/Data/Inbox", user_profile);
+
     // Default options: won't overwrite existing files
     let options = CopyOptions::new();
     let options = options.content_only(true); 
 
-    move_dir(src, dst, &options)?;
+    for base_source in &sources {
+        let source = format!("{}{}", user_profile, base_source);
+
+        move_dir(source, &destination, &options)?;
+    }
+
     Ok(())
 }
 
