@@ -37,6 +37,8 @@ pub fn process() -> Result<()>
     let options = options.content_only(true); 
 
     for base_source in &sources {
+        println!("Processing {}...", base_source);
+
         let source = format!("{}{}", user_profile, base_source);
 
         move_dir(source, &destination, &options)?;
