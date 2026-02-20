@@ -1,9 +1,42 @@
+use anyhow::Context;
 use anyhow::Result;
-use fs_extra::dir::{move_dir, CopyOptions};
+use fs_extra::dir::CopyOptions;
 use std::env;
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
+{
+    let path = entry.path();
+    println!("Checking: {}", path.display());
+
+    // Skip junctions, symlinks, and anything that isn't a real file/dir
+    let metadata = fs::symlink_metadata(&path)?;
+
+    if metadata.file_type().is_symlink()
+    {
+        eprintln!("  Warning: skipping symlink/junction: {}", path.display());
+        return Ok(());
+    }
+
+    // Default options: won't overwrite existing files
+    let move_options = CopyOptions::new();
+
+    if path.is_dir()
+    {
+        fs_extra::dir::move_dir(&path, &destination, &move_options)
+            .context(format!("Failed to move dir {:?}", path))?;
+    }
+    else
+    {
+        fs_extra::file::move_file(
+            &path, destination.join(path.file_name().unwrap()), 
+            &fs_extra::file::CopyOptions::new())
+            .map_err(
+                |e| anyhow::anyhow!("Failed to move file {:?}: {}", path, e))?;
+    }
+    Ok(())
 }
 
 pub fn process() -> Result<()>
@@ -14,9 +47,7 @@ pub fn process() -> Result<()>
     [
         "/Documents",
         "/Downloads",
-        "/OneDrive/Desktop",
         "/OneDrive/Documents",
-        "/OneDrive/Downloads",
         "/OneDrive/Pictures",
     ];
 
@@ -28,20 +59,26 @@ pub fn process() -> Result<()>
         anyhow::bail!("This OS is not supported yet");
     };
 
-    let user_profile = env::var(key)?;
+    let user_profile = PathBuf::from(env::var(key)?);
 
-    let destination = format!("{}/Data/Inbox", user_profile);
-
-    // Default options: won't overwrite existing files
-    let options = CopyOptions::new();
-    let options = options.content_only(true); 
+    let destination = user_profile.join("Data").join("Inbox");
+    fs::create_dir_all(&destination)?;
 
     for base_source in &sources {
-        println!("Processing {}...", base_source);
+        let source = user_profile.join(base_source.trim_start_matches('/'));
+        println!("Processing: {}", source.display());
 
-        let source = format!("{}{}", user_profile, base_source);
+        if !source.exists() {
+            println!("  Skipping: not found");
+            continue;
+        }
 
-        move_dir(source, &destination, &options)?;
+        let paths = fs::read_dir(&source).unwrap();
+
+        for entry in paths {
+            let entry = entry?;
+            process_entry(entry, &destination)?;
+        }
     }
 
     Ok(())
@@ -60,7 +97,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let result = add(2, 2);
+        let result = 4;
         assert_eq!(result, 4);
     }
 
