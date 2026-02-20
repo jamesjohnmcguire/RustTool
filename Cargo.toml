@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["inboxes","rusttool"]
+members = ["commands","inboxes","rusttool"]
 
 # [package]
 # name = "hello-rust"
