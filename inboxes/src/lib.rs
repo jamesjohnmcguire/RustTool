@@ -180,9 +180,14 @@ pub fn inbox(directory: &str) -> bool
     true
 }
 
+fn is_skip_error(e: &std::io::Error) -> bool {
+    matches!(e.kind(), ErrorKind::PermissionDenied | ErrorKind::AlreadyExists)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
 
     #[test]
     fn it_works() {
@@ -195,5 +200,16 @@ mod tests {
     {
         let check = inbox("test_inbox");
         assert_eq!(check, true);
+    }
+
+    #[test]
+    fn skip_errors_recognized() {
+        let perm = io::Error::from(io::ErrorKind::PermissionDenied);
+        let exists = io::Error::from(io::ErrorKind::AlreadyExists);
+        let other = io::Error::from(io::ErrorKind::NotFound);
+
+        assert!(is_skip_error(&perm));
+        assert!(is_skip_error(&exists));
+        assert!(!is_skip_error(&other));
     }
 }
