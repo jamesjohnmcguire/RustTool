@@ -212,4 +212,57 @@ mod tests {
         assert!(is_skip_error(&exists));
         assert!(!is_skip_error(&other));
     }
+
+    #[test]
+    fn integration_skip_on_destination_exists() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let base = std::env::temp_dir();
+        let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        let profile = base.join(format!("rusttool_integration_{}", t));
+
+        if cfg!(windows) {
+            std::env::set_var("USERPROFILE", &profile);
+        } else {
+            std::env::set_var("HOME", &profile);
+        }
+
+        let source_docs = profile.join("Documents");
+        fs::create_dir_all(&source_docs).unwrap();
+        let src_file = source_docs.join("hello.txt");
+        fs::write(&src_file, "hello").unwrap();
+
+        let dest = profile.join("Data").join("Inbox");
+        fs::create_dir_all(&dest).unwrap();
+        let dest_file = dest.join("hello.txt");
+        fs::write(&dest_file, "existing").unwrap();
+
+        assert!(process().is_ok());
+        assert!(src_file.exists());
+        let dest_contents = fs::read_to_string(&dest_file).unwrap();
+        assert_eq!(dest_contents, "existing");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn integration_permission_denied_unix() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::os::unix::fs::PermissionsExt;
+
+        let base = std::env::temp_dir();
+        let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        let profile = base.join(format!("rusttool_integration_{}", t));
+        std::env::set_var("HOME", &profile);
+
+        let source_docs = profile.join("Documents");
+        fs::create_dir_all(&source_docs).unwrap();
+        let protected = source_docs.join("protected_dir");
+        fs::create_dir_all(&protected).unwrap();
+
+        fs::set_permissions(&protected, fs::Permissions::from_mode(0)).unwrap();
+
+        assert!(process().is_ok());
+
+        fs::set_permissions(&protected, fs::Permissions::from_mode(0o755)).unwrap();
+    }
 }
