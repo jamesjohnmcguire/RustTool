@@ -7,7 +7,7 @@ use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
 
-fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
+fn process_entry(entry: fs::DirEntry, destination: &Path, ignore_errors: bool) -> Result<()>
 {
     let path = entry.path();
     println!("Checking: {}", path.display());
@@ -18,8 +18,9 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
         Err(e) => {
             if e.kind() == ErrorKind::PermissionDenied {
                 eprintln!("  Warning: permission denied accessing {}: {}", path.display(), e);
-                return Ok(());
+                if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Failed to read metadata {:?}: {}", path, e)); }
             } else {
+                if ignore_errors { eprintln!("  Warning: failed to read metadata {:?}: {}", path, e); return Ok(()); }
                 return Err(anyhow::anyhow!("Failed to read metadata {:?}: {}", path, e));
             }
         }
@@ -46,16 +47,21 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
         };
         let target = destination.join(file_name);
 
+        if target.exists() {
+            eprintln!("  Warning: destination exists for {:?}, skipping", path);
+            if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Destination exists: {:?}", path)); }
+        }
+
         match fs::rename(&path, &target) {
             Ok(_) => {}
             Err(e) => match e.kind() {
                 ErrorKind::AlreadyExists => {
                     eprintln!("  Warning: destination exists for {:?}, skipping", path);
-                    return Ok(());
+                    if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Destination exists: {:?}", path)); }
                 }
                 ErrorKind::PermissionDenied => {
                     eprintln!("  Warning: permission denied moving {:?}: {}", path, e);
-                    return Ok(());
+                    if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Permission denied moving: {:?}", path)); }
                 }
                 _ => {
                     // Fall back to fs_extra which can handle cross-volume moves.
@@ -63,7 +69,7 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
                         Ok(_) => {}
                         Err(e2) => {
                             eprintln!("  Warning: failed to move dir {:?}: {}", path, e2);
-                            return Ok(());
+                            if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Failed to move dir {:?}: {}", path, e2)); }
                         }
                     }
                 }
@@ -80,23 +86,28 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
             }
         };
         let target = destination.join(file_name);
+        if target.exists() {
+            eprintln!("  Warning: destination exists for {:?}, skipping", path);
+            if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Destination exists: {:?}", path)); }
+        }
+
         match fs::rename(&path, &target) {
             Ok(_) => {}
             Err(e) => match e.kind() {
                 ErrorKind::AlreadyExists => {
                     eprintln!("  Warning: destination exists for {:?}, skipping", path);
-                    return Ok(());
+                    if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Destination exists: {:?}", path)); }
                 }
                 ErrorKind::PermissionDenied => {
                     eprintln!("  Warning: permission denied moving {:?}: {}", path, e);
-                    return Ok(());
+                    if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Permission denied moving: {:?}", path)); }
                 }
                 _ => {
                     match fs_extra::file::move_file(&path, &target, &fs_extra::file::CopyOptions::new()) {
                         Ok(_) => {}
                         Err(e2) => {
                             eprintln!("  Warning: failed to move file {:?}: {}", path, e2);
-                            return Ok(());
+                            if ignore_errors { return Ok(()); } else { return Err(anyhow::anyhow!("Failed to move file {:?}: {}", path, e2)); }
                         }
                     }
                 }
@@ -106,27 +117,10 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
     Ok(())
 }
 
-pub fn process() -> Result<()>
-{
+pub fn process_with_profile(ignore_errors: bool, user_profile: &Path) -> Result<()> {
     println!("Processing inboxes...");
 
-    let sources = vec!
-    [
-        "/Documents",
-        "/Downloads",
-        "/OneDrive/Documents",
-        "/OneDrive/Pictures",
-    ];
-
-    let key = if cfg!(windows) {
-        "USERPROFILE"
-    } else if cfg!(unix) {
-        "HOME"
-    } else {
-        anyhow::bail!("This OS is not supported yet");
-    };
-
-    let user_profile = PathBuf::from(env::var(key)?);
+    let sources = vec!["/Documents", "/Downloads", "/OneDrive/Documents", "/OneDrive/Pictures"];
 
     let destination = user_profile.join("Data").join("Inbox");
     fs::create_dir_all(&destination)?;
@@ -163,14 +157,27 @@ pub fn process() -> Result<()>
 
             let entry_path = entry.path();
 
-            if let Err(e) = process_entry(entry, &destination) {
-                eprintln!("  Warning: failed to process {}: {}", entry_path.display(), e);
-                continue;
+            match process_entry(entry, &destination, ignore_errors) {
+                Ok(_) => {}
+                Err(e) => {
+                    if ignore_errors {
+                        eprintln!("  Warning: failed to process {}: {}", entry_path.display(), e);
+                        continue;
+                    } else {
+                        return Err(e);
+                    }
+                }
             }
         }
     }
 
     Ok(())
+}
+
+pub fn process(ignore_errors: bool) -> Result<()> {
+    let key = if cfg!(windows) { "USERPROFILE" } else if cfg!(unix) { "HOME" } else { anyhow::bail!("This OS is not supported yet"); };
+    let user_profile = PathBuf::from(env::var(key)?);
+    process_with_profile(ignore_errors, &user_profile)
 }
 
 pub fn inbox(directory: &str) -> bool
@@ -221,11 +228,7 @@ mod tests {
         let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
         let profile = base.join(format!("rusttool_integration_{}", t));
 
-        if cfg!(windows) {
-            std::env::set_var("USERPROFILE", &profile);
-        } else {
-            std::env::set_var("HOME", &profile);
-        }
+        // Call the processing function with the explicit test profile instead of setting env vars.
 
         let source_docs = profile.join("Documents");
         fs::create_dir_all(&source_docs).unwrap();
@@ -237,7 +240,7 @@ mod tests {
         let dest_file = dest.join("hello.txt");
         fs::write(&dest_file, "existing").unwrap();
 
-        assert!(process().is_ok());
+        assert!(process_with_profile(true, &profile).is_ok());
         assert!(src_file.exists());
         let dest_contents = fs::read_to_string(&dest_file).unwrap();
         assert_eq!(dest_contents, "existing");
@@ -252,7 +255,7 @@ mod tests {
         let base = std::env::temp_dir();
         let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
         let profile = base.join(format!("rusttool_integration_{}", t));
-        std::env::set_var("HOME", &profile);
+        // Call processing against the explicit test profile rather than setting HOME.
 
         let source_docs = profile.join("Documents");
         fs::create_dir_all(&source_docs).unwrap();
@@ -261,7 +264,7 @@ mod tests {
 
         fs::set_permissions(&protected, fs::Permissions::from_mode(0)).unwrap();
 
-        assert!(process().is_ok());
+        assert!(process_with_profile(true, &profile).is_ok());
 
         fs::set_permissions(&protected, fs::Permissions::from_mode(0o755)).unwrap();
     }
