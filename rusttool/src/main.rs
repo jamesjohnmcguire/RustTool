@@ -1,5 +1,7 @@
 fn main()
 {
     println!("Hello, world!");
-    inboxes::process().unwrap();
+    if let Err(e) = inboxes::process() {
+        eprintln!("Processing failed: {}", e);
+    }
 }
