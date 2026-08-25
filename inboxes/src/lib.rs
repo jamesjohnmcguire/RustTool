@@ -3,6 +3,7 @@ use anyhow::Result;
 use fs_extra::dir::CopyOptions;
 use std::env;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -12,7 +13,17 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
     println!("Checking: {}", path.display());
 
     // Skip junctions, symlinks, and anything that isn't a real file/dir
-    let metadata = fs::symlink_metadata(&path)?;
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind() == ErrorKind::PermissionDenied {
+                eprintln!("  Warning: permission denied accessing {}: {}", path.display(), e);
+                return Ok(());
+            } else {
+                return Err(anyhow::anyhow!("Failed to read metadata {:?}: {}", path, e));
+            }
+        }
+    };
 
     if metadata.file_type().is_symlink()
     {
@@ -25,16 +36,72 @@ fn process_entry(entry: fs::DirEntry, destination: &Path) -> Result<()>
 
     if path.is_dir()
     {
-        fs_extra::dir::move_dir(&path, &destination, &move_options)
-            .context(format!("Failed to move dir {:?}", path))?;
+        // Prefer atomic rename when possible so we can inspect std::io::ErrorKind.
+        let file_name = match path.file_name() {
+            Some(n) => n,
+            None => {
+                eprintln!("  Warning: skipping path without file name: {}", path.display());
+                return Ok(());
+            }
+        };
+        let target = destination.join(file_name);
+
+        match fs::rename(&path, &target) {
+            Ok(_) => {}
+            Err(e) => match e.kind() {
+                ErrorKind::AlreadyExists => {
+                    eprintln!("  Warning: destination exists for {:?}, skipping", path);
+                    return Ok(());
+                }
+                ErrorKind::PermissionDenied => {
+                    eprintln!("  Warning: permission denied moving {:?}: {}", path, e);
+                    return Ok(());
+                }
+                _ => {
+                    // Fall back to fs_extra which can handle cross-volume moves.
+                    match fs_extra::dir::move_dir(&path, &destination, &move_options) {
+                        Ok(_) => {}
+                        Err(e2) => {
+                            eprintln!("  Warning: failed to move dir {:?}: {}", path, e2);
+                            return Ok(());
+                        }
+                    }
+                }
+            },
+        }
     }
     else
     {
-        fs_extra::file::move_file(
-            &path, destination.join(path.file_name().unwrap()), 
-            &fs_extra::file::CopyOptions::new())
-            .map_err(
-                |e| anyhow::anyhow!("Failed to move file {:?}: {}", path, e))?;
+        let file_name = match path.file_name() {
+            Some(n) => n,
+            None => {
+                eprintln!("  Warning: skipping file without name: {}", path.display());
+                return Ok(());
+            }
+        };
+        let target = destination.join(file_name);
+        match fs::rename(&path, &target) {
+            Ok(_) => {}
+            Err(e) => match e.kind() {
+                ErrorKind::AlreadyExists => {
+                    eprintln!("  Warning: destination exists for {:?}, skipping", path);
+                    return Ok(());
+                }
+                ErrorKind::PermissionDenied => {
+                    eprintln!("  Warning: permission denied moving {:?}: {}", path, e);
+                    return Ok(());
+                }
+                _ => {
+                    match fs_extra::file::move_file(&path, &target, &fs_extra::file::CopyOptions::new()) {
+                        Ok(_) => {}
+                        Err(e2) => {
+                            eprintln!("  Warning: failed to move file {:?}: {}", path, e2);
+                            return Ok(());
+                        }
+                    }
+                }
+            },
+        }
     }
     Ok(())
 }
@@ -73,11 +140,33 @@ pub fn process() -> Result<()>
             continue;
         }
 
-        let paths = fs::read_dir(&source).unwrap();
+        let paths = match fs::read_dir(&source) {
+            Ok(iter) => iter,
+            Err(e) => {
+                if e.kind() == ErrorKind::PermissionDenied {
+                    eprintln!("  Warning: permission denied reading {}: {}", source.display(), e);
+                    continue;
+                } else {
+                    return Err(e).context(format!("Failed to read dir {:?}", source));
+                }
+            }
+        };
 
         for entry in paths {
-            let entry = entry?;
-            process_entry(entry, &destination)?;
+            let entry = match entry {
+                Ok(ent) => ent,
+                Err(e) => {
+                    eprintln!("  Warning: failed to read entry in {}: {}", source.display(), e);
+                    continue;
+                }
+            };
+
+            let entry_path = entry.path();
+
+            if let Err(e) = process_entry(entry, &destination) {
+                eprintln!("  Warning: failed to process {}: {}", entry_path.display(), e);
+                continue;
+            }
         }
     }
 
