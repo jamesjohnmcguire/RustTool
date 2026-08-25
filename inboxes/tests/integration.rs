@@ -14,11 +14,7 @@ fn make_temp_profile() -> PathBuf {
 #[test]
 fn skip_on_destination_exists() {
     let profile = make_temp_profile();
-    if cfg!(windows) {
-        env::set_var("USERPROFILE", &profile);
-    } else {
-        env::set_var("HOME", &profile);
-    }
+    // We'll call the library function with an explicit `profile` instead of setting env vars.
 
     // Create source Documents with a file
     let source_docs = profile.join("Documents");
@@ -33,7 +29,7 @@ fn skip_on_destination_exists() {
     fs::write(&dest_file, "existing").unwrap();
 
     // Run processing; should not panic and should skip the existing destination
-    assert!(inboxes::process().is_ok());
+    assert!(inboxes::process_with_profile(true, &profile).is_ok());
 
     // Source should still exist (skipped)
     assert!(src_file.exists());
@@ -49,7 +45,6 @@ fn permission_denied_skipped_unix() {
     use std::os::unix::fs::PermissionsExt;
 
     let profile = make_temp_profile();
-    env::set_var("HOME", &profile);
 
     let source_docs = profile.join("Documents");
     fs::create_dir_all(&source_docs).unwrap();
@@ -60,7 +55,7 @@ fn permission_denied_skipped_unix() {
     fs::set_permissions(&protected, fs::Permissions::from_mode(0)).unwrap();
 
     // Should not panic and should return Ok (skipping the protected dir)
-    assert!(inboxes::process().is_ok());
+    assert!(inboxes::process_with_profile(true, &profile).is_ok());
 
     // Restore perms for cleanup
     fs::set_permissions(&protected, fs::Permissions::from_mode(0o755)).unwrap();
@@ -72,7 +67,6 @@ fn permission_denied_skipped_windows() {
     use std::process::Command;
 
     let profile = make_temp_profile();
-    env::set_var("USERPROFILE", &profile);
 
     let source_docs = profile.join("Documents");
     fs::create_dir_all(&source_docs).unwrap();
@@ -106,7 +100,7 @@ fn permission_denied_skipped_windows() {
     }
 
     // Running process() should not panic and should skip the protected dir
-    let res = inboxes::process();
+    let res = inboxes::process_with_profile(true, &profile);
 
     // Try to remove the deny ACE we added. Use /remove:d to remove deny entries; if that fails, try /grant.
     let _ = Command::new("icacls")
