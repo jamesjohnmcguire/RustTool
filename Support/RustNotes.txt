@@ -1,4 +1,9 @@
-Rust
+Tasks
+	Persist a report of skipped items.
+	Make conflict resolution policy configurable (skip/rename/merge/overwrite).
+	Would you like me to add a --report <path> flag to write skipped-item reports, or implement cleanup of test artifacts?
+	RUST_BACKTRACE=1
+Notes
 	C:\Users\JamesMc\.cargo	This can be modified with the CARGO_HOME environment variable.
 
 	cargo new rusttool
