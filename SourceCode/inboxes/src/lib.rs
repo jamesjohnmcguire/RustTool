@@ -187,6 +187,7 @@ pub fn inbox(directory: &str) -> bool
     true
 }
 
+#[cfg(test)]
 fn is_skip_error(e: &std::io::Error) -> bool {
     matches!(e.kind(), ErrorKind::PermissionDenied | ErrorKind::AlreadyExists)
 }
