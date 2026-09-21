@@ -1,4 +1,5 @@
 Tasks
+	Normalize Logging
 	Persist a report of skipped items.
 	Make conflict resolution policy configurable (skip/rename/merge/overwrite).
 	Would you like me to add a --report <path> flag to write skipped-item reports, or implement cleanup of test artifacts?
@@ -14,3 +15,31 @@ Notes
 	cargo test -p inboxes
 
 	cargo add anyhow
+RustTool
+	Logging
+		Option 2: The Lightweight Classic (log)If you are building a simple command-line tool, an embedded system, or want minimal overhead, the log crate facade combined with an implementation like env_logger is ideal. [1] (https://docs.rs/log), [2] (https://www.youtube.com/watch?v=YgpbYBk1M0E&t=281), [3] (https://www.youtube.com/watch?v=VAeG2400HP0&t=17)
+
+		[dependencies]
+		log = "0.4"
+		env_logger = "0.11"
+
+		use log::{info, warn, error, debug, trace};
+
+		fn main() {
+			// Initialize the logger backend
+			env_logger::init();
+
+			trace!("This is a trace log (very low priority)");
+			debug!("This is a debug log");
+			info!("Informational message: system initialized");
+			warn!("Warning: connection timed out, retrying");
+			error!("Critical error: database is unreachable");
+		}
+
+		# Show only info level and above
+		$ RUST_LOG=info cargo run
+
+		# Show debug logs specifically for your binary, but info for dependencies
+		$ RUST_LOG=my_binary_name=debug cargo run
+
+		To write files: Use flexi_logger (for log) or tracing-appender (for tracing).
