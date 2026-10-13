@@ -111,6 +111,7 @@ dependencies = [
 name = "rusttool"
 version = "0.1.0"
 dependencies = [
+ "commands",
  "inboxes",
  "rand",
 ]
